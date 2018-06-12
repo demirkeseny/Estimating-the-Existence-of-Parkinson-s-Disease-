@@ -1,0 +1,288 @@
+---
+title: "Parkinson's"
+author: "Yalim Demirkesen"
+date: "June 12, 2018"
+output: html_document
+---
+The data set that I chose for this assignment is a parkinsons text file. http://archive.ics.uci.edu/ml/machine-learning-databases/parkinsons/
+
+```{r}
+parkinsons <- read.table("C:\\Users\\demir\\OneDrive\\NEU\\Fall 2017\\PPUA 5301\\Week13\\HW12\\parkinsons.data.txt", sep = ",", header = T)
+```
+
+I don't have any missing values. The dataset consists of 195 rows with 24 columns
+
+1. Use your dataset with a continuous dependent variable:
+
+a. Divide your data into two equal-sized samples, the in-sample and the out-sample. Estimate the elastic
+net model using at least three levels of alpha (ie, three positions in between full lasso and full ridge; eg,
+alpha = 0, 0.5, and 1), using cv.glmnet to find the best lambda level for each run. (Remember that
+glmnet prefers that data be in a numeric matrix format rather than a data frame.)
+
+I will divide my data into two sets:
+
+```{r}
+insample <- parkinsons[1:98,]
+outsample <- parkinsons[99:195,]
+```
+
+Now we will build three models. First will be the alpha=zero model, in other words pure ridge. Then comes the alpha=one, in other words pure lasso. In the third model we will provide an alpha of 0.5.
+
+First create the lambda, which is the shrinkage value. Later on, we will decide which lambda is best for our models.
+
+```{r}
+lambdalevels <- 10^seq(10,-5,length=100)
+```
+
+Also, we need to differentiate the columns that we will be using for predictors and target.
+
+```{r}
+x <- as.matrix(parkinsons[,3:23])
+y <- parkinsons$MDVP.Fo.Hz.
+```
+
+```{r}
+library(glmnet)
+cv.lasso.mod=cv.glmnet(x,y,alpha=1,lambda=lambdalevels)
+plot(cv.lasso.mod)
+```
+
+With the alpha value of 1, we can get the best lambda in 17 because the MSE value is min, which is almost 300.
+
+```{r}
+library(glmnet)
+cv.lasso.ridge.mod=cv.glmnet(x,y,alpha=0.5,lambda=lambdalevels)
+plot(cv.lasso.ridge.mod)
+```
+
+With the alpha value of 0.5, we can get the best lambda in 19 because the MSE value is min, which is almost 300.
+
+```{r}
+library(glmnet)
+cv.ridge.mod=cv.glmnet(x,y,alpha=0,lambda=lambdalevels)
+plot(cv.ridge.mod)
+```
+
+With the alpha value of 0, we can get the best lambda in 21 because the MSE value is min, which is almost 310.
+
+We found out as a conclusion that using alpha=1 and lambda=17 gives the best solution. (Because of graphs being very very similar, I used a ruler and measured the smallest error!)
+
+Now we can predict the coefficients:
+
+```{r}
+bestlambda <- cv.lasso.mod$lambda.min
+predict(cv.lasso.mod, type="coefficients",s=bestlambda)
+```
+
+Above you can find the equation.
+
+b. Choose the alpha (and corresponding lambda) with the best results (lowest error), and then test that
+model out-of-sample using the out-sample data.
+
+-I interpret the question so that I need to create a model on outsample and test it on also outsample.-
+
+alpha=0 and lambda=22 provides the best solution!
+
+```{r}
+trainx_b <- as.matrix(outsample[,3:23])
+trainy_b <- outsample$MDVP.Fo.Hz.
+testx <- as.matrix(outsample[,3:23])
+testy <- outsample$MDVP.Fo.Hz.
+```
+
+```{r}
+cv.lasso.mod1=cv.glmnet(trainx_b,trainy_b,alpha=0,lambda=lambdalevels)
+yhat.l <- predict(cv.lasso.mod1$glmnet.fit, s=cv.lasso.mod1$lambda.min, newx=testx)
+mse.las <- sum((testy - yhat.l)^2)/nrow(testx)
+mse.las
+```
+
+Here we get a MSE score of 151.14!
+
+c. Compare your out-of-sample results to regular multiple regression: fit the regression model in-sample,
+predict yhat out-of-sample, and estimate the error. Which works better?
+
+-For this question I understand that I need to create a model by Lasso and regression. We need to train both of the models by insample and test them by outsample. Since we will be comparing two models, everything must be the same other than using Lasso and multiple regression such as training and testing data sets.-
+
+```{r}
+trainx_c <- as.matrix(insample[,3:23])
+trainy_c <- as.double(insample$MDVP.Fo.Hz.)
+testx_c <- as.matrix(outsample[,3:23])
+testy_c <- outsample$MDVP.Fo.Hz.
+```
+
+```{r}
+cv.lasso.mod2=cv.glmnet(trainx_c,trainy_c,alpha=0,lambda=lambdalevels)
+yhat.l2 <- predict(cv.lasso.mod2$glmnet.fit, s=cv.lasso.mod2$lambda.min, newx=testx_c)
+mse.las2 <- sum((testy_c - yhat.l2)^2)/nrow(testx)
+mse.las2
+```
+
+```{r}
+lmout <- lm(trainy_c ~ trainx_c)
+yhat.r <- cbind(1,testx_c) %*% lmout$coefficients
+mse.reg <- sum((testy_c - yhat.r)^2)/nrow(testx_c)
+mse.reg
+```
+
+Now we have the error value of 982 vs 1077. That shows that our model including the lasso model is better.
+
+Let's check the coefficients:
+
+```{r}
+lmout$coefficients
+```
+
+d. Which coefficients are different between the multiple regression and the elastic net model? What,
+if anything, does this tell you substantively about the effects of your independent variables on your
+dependent variable?
+
+To check the coefficients we can basically construct a data frame.
+
+```{r}
+a <- predict(cv.lasso.mod2, type="coefficients",s=bestlambda)
+coef <- cbind(a,lmout$coefficients)
+coef
+```
+
+When we take a look at the above matrix, we see that there are certain similarities and differences. There are significant differences in Jitter.DDP and Shimmer.APQ3.
+
+The number of different coefficients is high but that could be foreseen from the MSE values of both calculations. This shows that our model which we created with Lasso, is doing a better job by fitting the data but not overfitting because of number of rows. On the other hand that might be a problem for linear regression models.
+
+On the other hand we can also conclude that training and testing the model on the same dataset might lead to overfitting since the actual performance of the model varies dramatically when the training and testing datasets varies.
+
+2. Repeat the same process using your dataset with a binary dependent variable:
+
+a. Divide your data into an in-sample and out-sample as before, and estimate an SVM using at least two
+different kernels and tune to find the best cost level for each.
+
+We can use the same divided data. Basically I took the data and took half of it without using any index analysis because there is no time period for the creation of these data points.
+
+```{r}
+insample <- parkinsons[1:98,]
+outsample <- parkinsons[99:195,]
+```
+
+```{r}
+x2 <- as.matrix(parkinsons[,c(2:17,19:24)])
+y2 <- parkinsons$status
+```
+
+Since I need to pick two kernels, I decided to take linear and polynomial!
+
+```{r}
+library(e1071)
+
+svmfit1 <- svm(status ~ MDVP.Fo.Hz. + MDVP.Fhi.Hz. + MDVP.Flo.Hz. + MDVP.Jitter... + MDVP.Jitter.Abs. + MDVP.RAP + MDVP.PPQ + Jitter.DDP + MDVP.Shimmer + MDVP.Shimmer.dB. + Shimmer.APQ3 + Shimmer.APQ5 + MDVP.APQ + Shimmer.DDA + NHR + HNR + RPDE + DFA + spread1 + spread2 + D2 + PPE, data = parkinsons, cost=10, kernel="linear")
+
+svmfit2 <- svm(status ~ MDVP.Fo.Hz. + MDVP.Fhi.Hz. + MDVP.Flo.Hz. + MDVP.Jitter... + MDVP.Jitter.Abs. + MDVP.RAP + MDVP.PPQ + Jitter.DDP + MDVP.Shimmer + MDVP.Shimmer.dB. + Shimmer.APQ3 + Shimmer.APQ5 + MDVP.APQ + Shimmer.DDA + NHR + HNR + RPDE + DFA + spread1 + spread2 + D2 + PPE, data = parkinsons, cost=10, kernel="polynomial")
+```
+
+```{r}
+values <- 10^seq(-3,2,1)
+
+tuned.svm_linear <- tune(svm, status ~ MDVP.Fo.Hz. + MDVP.Fhi.Hz. + MDVP.Flo.Hz. + MDVP.Jitter... + MDVP.Jitter.Abs. + MDVP.RAP + MDVP.PPQ + Jitter.DDP + MDVP.Shimmer + MDVP.Shimmer.dB. + Shimmer.APQ3 + Shimmer.APQ5 + MDVP.APQ + Shimmer.DDA + NHR + HNR + RPDE + DFA + spread1 + spread2 + D2 + PPE, data = parkinsons, ranges = list(cost=values), kernel="linear")
+summary(tuned.svm_linear)
+```
+
+At the best cost setting (0.1) for linear kernel function, we get only 13% of the points incorrectly. 
+
+```{r}
+values <- 10^seq(-3,2,1)
+
+tuned.svm_polynomial <- tune(svm, status ~ MDVP.Fo.Hz. + MDVP.Fhi.Hz. + MDVP.Flo.Hz. + MDVP.Jitter... + MDVP.Jitter.Abs. + MDVP.RAP + MDVP.PPQ + Jitter.DDP + MDVP.Shimmer + MDVP.Shimmer.dB. + Shimmer.APQ3 + Shimmer.APQ5 + MDVP.APQ + Shimmer.DDA + NHR + HNR + RPDE + DFA + spread1 + spread2 + D2 + PPE, data = parkinsons, ranges = list(cost=values), kernel="radial")
+summary(tuned.svm_polynomial)
+```
+
+At the best cost setting (0.1) for linear kernel function, we get 5% of the points incorrectly.
+
+b. Chose the kernel and cost with the best results, and then test that model out-of-sample using the
+out-sample data.
+
+For the best result we need to have the cost as 0.1 and kernel function as radial
+
+```{r}
+x2 <- as.matrix(parkinsons[,c(2:17,19:24)])
+y2 <- parkinsons$status
+summary(y2)
+```
+
+We see that the majority has the disease by  having a one in their status column. 
+
+```{r}
+trainx_2b <- as.matrix(outsample[,c(2:17,19:24)])
+trainy_2b <- outsample$status
+testx_2b <- as.matrix(outsample[,c(2:17,19:24)])
+testy_2b <- outsample$status
+```
+
+```{r}
+tuned.svm <- tune(svm, status ~ MDVP.Fo.Hz. + MDVP.Fhi.Hz. + MDVP.Flo.Hz. + MDVP.Jitter... + MDVP.Jitter.Abs. + MDVP.RAP + MDVP.PPQ + Jitter.DDP + MDVP.Shimmer + MDVP.Shimmer.dB. + Shimmer.APQ3 + Shimmer.APQ5 + MDVP.APQ + Shimmer.DDA + NHR + HNR + RPDE + DFA + spread1 + spread2 + D2 + PPE, data=outsample, ranges=list(cost=values), kernel="radial")
+summary(tuned.svm)
+```
+
+So the best solution that we get is 8% wrong and 92% correct estimation.
+
+c. Compare your results to a logistic regression: fit the logit in-sample, predict yhat out-of-sample, and
+estimate the accuracy. Which works better?
+
+So as we did in the 1.C, I will first train the svm with insample than test it with outsample. The same process will be applied for the logistic regression!
+
+```{r}
+tuned.svm2 <- tune(svm, status ~ MDVP.Fo.Hz. + MDVP.Fhi.Hz. + MDVP.Flo.Hz. + MDVP.Jitter... + MDVP.Jitter.Abs. + MDVP.RAP + MDVP.PPQ + Jitter.DDP + MDVP.Shimmer + MDVP.Shimmer.dB. + Shimmer.APQ3 + Shimmer.APQ5 + MDVP.APQ + Shimmer.DDA + NHR + HNR + RPDE + DFA + spread1 + spread2 + D2 + PPE, data=insample, ranges=list(cost=values), kernel="radial")
+summary(tuned.svm2)
+```
+
+From svm we get an accuracy score of 98%.
+
+With the logistic regression:
+
+```{r}
+model <- glm(status ~ MDVP.Fo.Hz. + MDVP.Fhi.Hz. + MDVP.Flo.Hz. + MDVP.Jitter... + MDVP.Jitter.Abs. + MDVP.RAP + MDVP.PPQ + Jitter.DDP + MDVP.Shimmer + MDVP.Shimmer.dB. + Shimmer.APQ3 + Shimmer.APQ5 + MDVP.APQ + Shimmer.DDA + NHR + HNR + RPDE + DFA + spread1 + spread2 + D2 + PPE, family=binomial(link='logit'), data=insample)
+summary(model)
+```
+
+Now we can guess the function using the coefficients:
+
+```{r}
+coefficient <- as.data.frame(model$coefficients)
+outsample <- as.data.frame(outsample)
+outsample$pred <- 0
+outsample$pred <- as.numeric(outsample$pred)
+
+c <- colnames(outsample)
+
+for(i in 1:nrow(outsample)){
+outsample$pred[i] <- coefficient[1,1] + outsample$MDVP.Fo.Hz.[i]*782.4 + outsample$MDVP.Fhi.Hz.[i]*coefficient[3,1] + outsample$MDVP.Flo.Hz.[i]*coefficient[4,1] + outsample$MDVP.Jitter...[i]*coefficient[5,1] + outsample$MDVP.Jitter.Abs.[i]*coefficient[6,1] + outsample$MDVP.RAP[i]*coefficient[7,1] + outsample$MDVP.PPQ[i]*coefficient[8,1] + outsample$Jitter.DDP[i]*coefficient[9,1] + outsample$MDVP.Shimmer[i]*coefficient[10,1] + outsample$MDVP.Shimmer.dB.[i]*coefficient[11,1] + outsample$Shimmer.APQ3[i]*coefficient[12,1] + outsample$Shimmer.APQ5[i]*coefficient[13,1] + outsample$MDVP.APQ[i]*coefficient[14,1] + outsample$Shimmer.DDA[i]*coefficient[15,1] + outsample$NHR[i]*coefficient[16,1] + outsample$HNR[i]*coefficient[17,1] + outsample$RPDE[i]*coefficient[18,1] + outsample$DFA[i]*coefficient[19,1] + outsample$spread1[i]*coefficient[20,1] + outsample$spread2[i]*coefficient[21,1] + outsample$D2[i]*coefficient[22,1] + outsample$PP[i]*coefficient[23,1]
+}
+
+for(i in 1:nrow(outsample)){
+  if(outsample$pred[i]>0.5){
+    outsample$pred[i] <- 1
+  }else{
+    outsample$pred[i] <- 0
+  }
+}
+
+encounter <- 0
+
+for(i in 1:nrow(outsample)){
+  if(outsample$pred[i] == outsample$status[i]){
+    encounter <- encounter + 1
+  }
+}
+
+encounter/nrow(outsample)
+```
+
+Logistic regression provides us an accuracy of 75%. We see that in our case, the SVM works much much better. (%98>%75)
+
+d. Can you make any guesses as to why the SVM works better (if it does)? Feel to speculate, or to research
+a bit more the output of svm, the meaning of the support vectors, or anything else you can discover
+about SVMs (no points off for erroneous speculations!).
+
+There is a simple reason of this. Since we are using a radial svm model, our prediction does not need to be linear. So its slope might vary and it might have curvatures, which allows to take into consideration a mixed clustered groups. The logistic regression comes from a linear regression and basically it can only create one line, which has a slope same all around the graph. The error values both of these techniques vary since the curvature structure allows svm to approach to the points more than an unelastic line. 
+
+In svm, we have a chance to classify the data points much easier. We define a hyperplane, then maximize its margin. We can maximize the margin as much as the points on the graph are allowed to cut the support vector, which is also called the cost. There is also a penalty term for miscalculation. So the algorithm also tries to minimize that value. This minimization of the errors allow the line or curve of support vector to be closer to the actual points. 
+
+When we imagine a scatterplot where the group 1 and 2 are so located that group 1 elements are in a circle and group 2 elements surround them. With a linear model we can never fully understand and desscribe those points.What we can do is to create such a line that has the minimum total distance from all the points. But on the other hand svm works differently. That is the reason there is almost 25% difference between the accuracies of logistic regression and svm. In svm, we can cluster the inner points by creating a curvature line and can pass very very close to the actual points. That decreases the error rate dramatically and makes the technique much applicable to real world problems.
